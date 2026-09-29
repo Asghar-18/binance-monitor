@@ -1,7 +1,7 @@
 import 'server-only';
 
 /** Server-side calls to the NestJS backend. The API token never reaches the browser. */
-export async function backendFetch(path: string, init: RequestInit = {}): Promise<Response> {
+export async function backendFetch(path: string, init: RequestInit = {}, timeoutMs = 15_000): Promise<Response> {
   const base = process.env.BACKEND_URL || 'http://localhost:4000';
   const token = process.env.API_TOKEN;
   if (!token) throw new Error('API_TOKEN is not set for the dashboard');
@@ -13,7 +13,7 @@ export async function backendFetch(path: string, init: RequestInit = {}): Promis
       authorization: `Bearer ${token}`,
       'content-type': 'application/json',
     },
-    signal: AbortSignal.timeout(15_000),
+    signal: AbortSignal.timeout(timeoutMs),
   });
 }
 

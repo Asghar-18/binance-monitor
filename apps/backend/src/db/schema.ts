@@ -2,6 +2,8 @@ import {
   bigint,
   boolean,
   doublePrecision,
+  integer,
+  jsonb,
   pgTable,
   serial,
   text,
@@ -94,8 +96,27 @@ export const alerts = pgTable('alerts', {
   priceUsd: doublePrecision('price_usd'),
   status: text('status').notNull(),
   message: text('message'),
+  /** Claude's analysis attached to the alert, if any */
+  analysis: jsonb('analysis'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });
 
 export type AlertRuleRow = typeof alertRules.$inferSelect;
 export type AlertRow = typeof alerts.$inferSelect;
+
+/** Every Claude call: for cost tracking and to review what it said. */
+export const llmCalls = pgTable('llm_calls', {
+  id: serial('id').primaryKey(),
+  purpose: text('purpose').notNull(),
+  asset: text('asset'),
+  model: text('model').notNull(),
+  input: jsonb('input').notNull(),
+  output: text('output'),
+  ok: boolean('ok').notNull(),
+  problems: text('problems'),
+  inputTokens: integer('input_tokens').notNull().default(0),
+  outputTokens: integer('output_tokens').notNull().default(0),
+  costUsd: doublePrecision('cost_usd').notNull().default(0),
+  latencyMs: integer('latency_ms').notNull().default(0),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+});

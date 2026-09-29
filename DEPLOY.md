@@ -55,7 +55,11 @@ git push -u origin main
    API_TOKEN=...
    NTFY_TOPIC=...
    TIMEZONE=Asia/Karachi
+   ANTHROPIC_API_KEY=...
+   DIGEST_TIME=09:00
    ```
+
+   `ANTHROPIC_API_KEY` is optional (see "Claude analysis" below); without it alerts come without the explanation.
 
    `${{Postgres.DATABASE_URL}}` is typed literally; Railway fills it in.
 5. **Settings**, then **Region**: choose **EU West (Amsterdam)** or **Southeast Asia (Singapore)**. Not a US region: Binance blocks US servers.
@@ -96,6 +100,14 @@ Optional: in the Vercel project, **Settings**, then **Functions**, set the regio
    ```
 
 3. **Binance key:** Railway's outgoing IP address can change, so leave the key without an IP restriction. It is read-only, so it cannot trade or withdraw.
+
+## Claude analysis
+
+1. Sign in at **console.anthropic.com** and add a small amount of credit (e.g. $5) under **Billing**.
+2. Optional but sensible: set a monthly spend limit in the console as a second safety net.
+3. **Settings**, then **API keys**, then **Create key**. Copy it.
+4. In Railway, add `ANTHROPIC_API_KEY` to the backend's variables. The backend restarts by itself.
+5. On the dashboard, open a coin and tap **Ask Claude now** to check it works.
 
 ## Updating later
 

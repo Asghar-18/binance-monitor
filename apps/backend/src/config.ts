@@ -57,6 +57,20 @@ const schema = z.object({
   /** Do not send alerts for this many seconds after startup */
   ALERT_STARTUP_GRACE_SEC: z.coerce.number().int().min(0).default(300),
 
+  // --- Claude analysis --------------------------------------------------
+  ANTHROPIC_API_KEY: z.string().optional().transform((v) => v || undefined),
+  ANTHROPIC_MODEL: z.string().default('claude-haiku-4-5'),
+  ANTHROPIC_BASE_URL: z.string().url().default('https://api.anthropic.com'),
+  /** Stop calling Claude for the rest of the month after this much spend */
+  LLM_MONTHLY_BUDGET_USD: z.coerce.number().min(0).default(5),
+
+  // --- Morning summary --------------------------------------------------
+  /** Local time (TIMEZONE) for the daily summary, e.g. 09:00; "off" disables */
+  DIGEST_TIME: z
+    .string()
+    .default('09:00')
+    .refine((v) => v === 'off' || /^([01]\d|2[0-3]):[0-5]\d$/.test(v), 'DIGEST_TIME must be HH:MM or off'),
+
   /** Never set this in production: lets the app start with a key that can trade or withdraw */
   ALLOW_UNSAFE_KEY: bool,
 });

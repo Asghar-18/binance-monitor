@@ -34,6 +34,43 @@ export interface Position {
   };
   /** Alert settings for this coin (absent for stablecoins) */
   alerts?: PositionAlerts;
+  /** Indicators on 1h / 4h / 1d candles; null when unavailable */
+  technical?: Technical | null;
+  /** Most recent Claude analysis for this coin */
+  analysis?: Analysis | null;
+}
+
+export type Trend = 'bullish' | 'bearish' | 'neutral';
+export type Timeframe = '1h' | '4h' | '1d';
+
+export interface TimeframeTechnical {
+  trend: Trend | null;
+  rsi: number | null;
+  /** Last closed candle volume / average of previous 20 */
+  volumeRatio: number | null;
+  atrPct: number | null;
+}
+
+export interface Technical {
+  /** Pair the indicators were computed on, e.g. XLMUSDT (prices in USD) */
+  symbol: string;
+  timeframes: Partial<Record<Timeframe, TimeframeTechnical>>;
+  ema50_4h: number | null;
+  ema200_1d: number | null;
+  /** Nearest levels, USD */
+  supportUsd: number | null;
+  resistanceUsd: number | null;
+  computedAt: string;
+}
+
+/** Claude's plain-language read of the numbers. Descriptive only: never buy/sell advice. */
+export interface Analysis {
+  headline: string;
+  summary: string;
+  context: string;
+  watch: string[];
+  createdAt: string;
+  model: string;
 }
 
 export interface ThresholdInfo {
@@ -61,6 +98,7 @@ export interface AlertItem {
   currency: Currency;
   status: AlertStatus;
   createdAt: string;
+  analysis: Analysis | null;
 }
 
 export interface PortfolioTotals {
@@ -96,6 +134,16 @@ export interface PortfolioSnapshot {
     /** true while the WebSocket price feed is delivering updates */
     liveFeed: boolean;
     lastPriceAt: string | null;
+    ai: {
+      configured: boolean;
+      /** USD left in this month's Claude budget */
+      budgetLeftUsd: number | null;
+    };
+    digest: {
+      /** Local time the morning summary is sent, e.g. "09:00"; null when off */
+      time: string | null;
+      lastSent: string | null;
+    };
     /** ntfy push notifications (no VPN needed) */
     ntfy: { configured: boolean };
     telegram: {

@@ -18,7 +18,7 @@ const pct = (part: number, whole: number) => (whole !== 0 ? (part / whole) * 100
 
 /** Snapshot without the alert fields, which AlertService adds. */
 export type BaseSnapshot = Omit<PortfolioSnapshot, 'alerts' | 'status'> & {
-  status: Omit<PortfolioSnapshot['status'], 'telegram' | 'ntfy'>;
+  status: Omit<PortfolioSnapshot['status'], 'telegram' | 'ntfy' | 'ai' | 'digest'>;
 };
 
 @Injectable()

@@ -1,7 +1,9 @@
 import { Inject, Injectable, Logger, OnApplicationBootstrap } from '@nestjs/common';
 import { Interval } from '@nestjs/schedule';
 import { and, desc, eq } from 'drizzle-orm';
-import type { AlertItem, AlertKind, AlertStatus, Currency, PortfolioSnapshot, Position } from '@bpm/shared';
+import type { AlertItem, AlertKind, AlertStatus, Analysis, Currency, PortfolioSnapshot, Position } from '@bpm/shared';
+import { AnalysisService } from '../analysis/analysis.service';
+import { technicalLines } from '../analysis/inputs';
 import { AppConfig, CONFIG } from '../config';
 import { DB, Db } from '../db/tokens';
 import { KvService } from '../db/kv.service';
@@ -43,6 +45,7 @@ export class AlertService implements OnApplicationBootstrap {
     private readonly telegram: TelegramClient,
     private readonly ntfy: NtfyClient,
     private readonly notifier: NotifierService,
+    private readonly analysis: AnalysisService,
   ) {}
 
   async onApplicationBootstrap() {
@@ -121,16 +124,35 @@ export class AlertService implements OnApplicationBootstrap {
     const now = Date.now();
     const last = this.lastAlert.get(p.asset);
     const cooldownMs = this.cfg.ALERT_COOLDOWN_MIN * 60_000;
-    const msg = kind === 'threshold' ? this.thresholdMessage(p, thresholdPct, pnl, currency) : this.watchMessage(p, thresholdPct, pnl);
-    const message = [msg.title, ...msg.lines].join('\n');
-
-    let status: AlertStatus;
+    let status: AlertStatus | null = null;
     if ((this.mutes.get(p.asset) ?? 0) > now) status = 'muted';
     else if (kind === 'threshold' && !passesCooldown(thresholdPct, last, now, cooldownMs)) status = 'suppressed';
     else if (kind === 'watch' && last && now - last.at < cooldownMs) status = 'suppressed';
     else if (kind === 'watch' && isQuietHour(new Date(now), this.cfg.QUIET_HOURS, this.cfg.TIMEZONE)) status = 'quiet';
     else if (!this.notifier.anyChannel) status = 'not_linked';
-    else status = (await this.notifier.send(msg)).delivered ? 'sent' : 'failed';
+
+    const msg = kind === 'threshold' ? this.thresholdMessage(p, thresholdPct, pnl, currency) : this.watchMessage(p, thresholdPct, pnl);
+    let analysis: Analysis | null = null;
+    // Indicators and Claude's read only for threshold alerts that will actually be sent.
+    if (kind === 'threshold' && status === null) {
+      try {
+        const res = await this.analysis.explain(p, currency, `${p.asset} crossed your ${thr(thresholdPct)} alert`);
+        analysis = res.analysis;
+        const tech = technicalLines(p, res.tech, currency);
+        const next = msg.lines.pop()!; // keep "Next alert" last
+        msg.lines.push(...tech);
+        if (analysis) {
+          msg.lines.push('', analysis.summary);
+          if (analysis.context) msg.lines.push(analysis.context);
+          if (analysis.watch.length) msg.lines.push(`Watch: ${analysis.watch.join('; ')}`);
+        }
+        msg.lines.push('', next);
+      } catch (e) {
+        this.log.warn(`Analysis failed, sending without it: ${(e as Error).message}`);
+      }
+    }
+    const message = [msg.title, ...msg.lines].join('\n');
+    if (status === null) status = (await this.notifier.send(msg)).delivered ? 'sent' : 'failed';
 
     if (kind === 'threshold' && status === 'sent') this.lastAlert.set(p.asset, { at: now, thresholdPct });
     await this.db.insert(alerts).values({
@@ -142,6 +164,7 @@ export class AlertService implements OnApplicationBootstrap {
       priceUsd: p.priceUsd,
       status,
       message,
+      analysis,
     });
     this.log.log(`${kind} alert ${p.asset} ${thr(thresholdPct)} at ${pct(pnl)}: ${status}`);
   }
@@ -253,6 +276,7 @@ export class AlertService implements OnApplicationBootstrap {
       currency: r.currency as Currency,
       status: r.status as AlertStatus,
       createdAt: r.createdAt.toISOString(),
+      analysis: (r.analysis as Analysis | null) ?? null,
     }));
   }
 
@@ -266,8 +290,11 @@ export class AlertService implements OnApplicationBootstrap {
         ? rules.map((r) => ({ pct: r.thresholdPct, armed: r.armed }))
         : this.cfg.DEFAULT_THRESHOLDS.map((t) => ({ pct: t, armed: true }));
       const until = this.mutedUntil(p.asset);
+      const tech = this.analysis.technical.cached(p.asset);
       return {
         ...p,
+        technical: tech ? { ...tech, summaries: undefined } : null,
+        analysis: this.analysis.latestFor(p.asset),
         alerts: {
           thresholds,
           mutedUntil: until ? new Date(until).toISOString() : null,
@@ -281,6 +308,11 @@ export class AlertService implements OnApplicationBootstrap {
       status: {
         ...base.status,
         ntfy: { configured: this.ntfy.configured },
+        ai: { configured: this.analysis.claude.configured, budgetLeftUsd: await this.analysis.claude.budgetLeft() },
+        digest: {
+          time: this.cfg.DIGEST_TIME === 'off' ? null : this.cfg.DIGEST_TIME,
+          lastSent: await this.kv.get('digest:lastSentAt'),
+        },
         telegram: {
           configured: this.telegram.configured,
           linked: this.telegram.linked,

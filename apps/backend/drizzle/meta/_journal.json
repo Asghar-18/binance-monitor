@@ -15,6 +15,13 @@
       "when": 1790594264215,
       "tag": "0001_absurd_karnak",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1790671805632,
+      "tag": "0002_common_norman_osborn",
+      "breakpoints": true
     }
   ]
 }

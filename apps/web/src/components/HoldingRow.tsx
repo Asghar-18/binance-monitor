@@ -3,6 +3,7 @@
 import { useId, useState } from 'react';
 import type { Currency, EntrySource, PortfolioSnapshot, Position } from '@bpm/shared';
 import { money, parseThresholdList, percent, quantity, threshold, tone } from '@/lib/format';
+import { ClaudeRead, TechnicalTable } from './Insight';
 
 const SOURCE_TEXT: Record<EntrySource, string> = {
   history: 'from your trades',
@@ -14,10 +15,12 @@ const SOURCE_TEXT: Record<EntrySource, string> = {
 export function HoldingRow({
   position: p,
   currency,
+  aiConfigured,
   onChanged,
 }: {
   position: Position;
   currency: Currency;
+  aiConfigured: boolean;
   onChanged: (s: PortfolioSnapshot) => void;
 }) {
   const [open, setOpen] = useState(false);
@@ -99,6 +102,8 @@ export function HoldingRow({
               </>
             )}
           </dl>
+          {!p.isStable && <TechnicalTable position={p} currency={currency} />}
+          {!p.isStable && <ClaudeRead position={p} aiConfigured={aiConfigured} onChanged={onChanged} />}
           {!p.isStable && <EntryEditor position={p} currency={currency} onChanged={onChanged} />}
           {p.alerts && <ThresholdEditor position={p} onChanged={onChanged} />}
         </div>

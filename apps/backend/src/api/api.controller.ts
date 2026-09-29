@@ -13,7 +13,9 @@ import {
 } from '@nestjs/common';
 import { z } from 'zod';
 import { AlertService } from '../alerts/alert.service';
+import { DigestService } from '../alerts/digest.service';
 import { NotifierService } from '../alerts/notifier.service';
+import { AnalysisService } from '../analysis/analysis.service';
 import { ApiTokenGuard } from '../common/auth.guard';
 import { PortfolioService } from '../portfolio/portfolio.service';
 
@@ -41,6 +43,8 @@ export class ApiController {
     private readonly portfolio: PortfolioService,
     private readonly alerts: AlertService,
     private readonly notifier: NotifierService,
+    private readonly digest: DigestService,
+    private readonly analysis: AnalysisService,
   ) {}
 
   private async snapshot() {
@@ -75,6 +79,28 @@ export class ApiController {
     const unique = [...new Set(parsed.data.thresholds.map((n) => Math.round(n * 100) / 100))].sort((a, b) => a - b);
     await this.alerts.setThresholds(assetParam(asset), unique);
     return this.snapshot();
+  }
+
+  @Post('holdings/:asset/analysis')
+  @HttpCode(200)
+  async analyse(@Param('asset') asset: string) {
+    if (!this.analysis.claude.configured) throw new BadRequestException('ANTHROPIC_API_KEY is not set on the backend');
+    const a = assetParam(asset);
+    const p = this.portfolio.getSnapshot()?.positions.find((x) => x.asset === a);
+    if (!p || p.isStable) throw new BadRequestException(`No analysable holding for ${a}`);
+    const currency = p.pnl.pkrPct !== null ? 'PKR' : 'USD';
+    const result = await this.analysis.onDemand(p, currency);
+    if (!result) throw new ServiceUnavailableException('Claude did not return a usable analysis. Try again in a few minutes.');
+    return this.snapshot();
+  }
+
+  @Post('digest/send')
+  @HttpCode(200)
+  async sendDigest() {
+    if (!this.notifier.anyChannel) throw new BadRequestException('No alert channel is set up');
+    const ok = await this.digest.send();
+    if (!ok) throw new ServiceUnavailableException('Summary was not delivered. Check the backend logs.');
+    return { ok };
   }
 
   @Post('alerts/test')

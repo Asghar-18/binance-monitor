@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import type { AlertItem, Currency, PortfolioSnapshot, Position } from '@bpm/shared';
 import { money, percent, shortDate, threshold, time, tone } from '@/lib/format';
 import { HoldingRow } from './HoldingRow';
+import { AnalysisCard } from './Insight';
 
 const POLL_MS = 15_000;
 const SEGMENTS = ['--seg-1', '--seg-2', '--seg-3', '--seg-4', '--seg-5', '--seg-6'];
@@ -106,7 +107,7 @@ export function PortfolioView({ initial }: { initial: PortfolioSnapshot | null }
         ) : (
           <ul className="list">
             {snap.positions.map((p) => (
-              <HoldingRow key={p.asset} position={p} currency={cur} onChanged={setSnap} />
+              <HoldingRow key={p.asset} position={p} currency={cur} aiConfigured={snap.status.ai.configured} onChanged={setSnap} />
             ))}
           </ul>
         )}
@@ -212,6 +213,7 @@ function AlertChannelCard({ snap }: { snap: PortfolioSnapshot }) {
             {state === 'sending' ? 'Sending' : state === 'sent' ? 'Test sent' : 'Send a test alert'}
           </button>
           {state === 'error' && error && <p className="form-msg">Test failed: {error}</p>}
+          <DigestControl snap={snap} />
         </div>
       )}
       {showTelegramLink && (
@@ -234,6 +236,36 @@ function AlertChannelCard({ snap }: { snap: PortfolioSnapshot }) {
   );
 }
 
+function DigestControl({ snap }: { snap: PortfolioSnapshot }) {
+  const d = snap.status.digest;
+  const [state, setState] = useState<'idle' | 'sending' | 'sent' | 'error'>('idle');
+  const [error, setError] = useState<string | null>(null);
+
+  async function sendNow() {
+    setState('sending');
+    setError(null);
+    try {
+      const res = await fetch('/api/digest/send', { method: 'POST' });
+      const body = await res.json();
+      if (!res.ok) throw new Error(body?.message ?? `HTTP ${res.status}`);
+      setState('sent');
+    } catch (e) {
+      setError((e as Error).message);
+      setState('error');
+    }
+  }
+
+  return (
+    <div className="digest">
+      <span>{d.time ? `Morning summary every day at ${d.time}.` : 'Morning summary is off.'}</span>
+      <button type="button" className="link-btn inline" onClick={sendNow} disabled={state === 'sending'}>
+        {state === 'sending' ? 'Preparing summary' : state === 'sent' ? 'Summary sent' : 'Send summary now'}
+      </button>
+      {state === 'error' && error && <p className="form-msg">Summary failed: {error}</p>}
+    </div>
+  );
+}
+
 const STATUS_TEXT: Record<AlertItem['status'], string> = {
   sent: '',
   failed: 'not delivered',
@@ -248,17 +280,31 @@ function RecentAlerts({ alerts }: { alerts: AlertItem[] }) {
     <section className="recent" aria-labelledby="recent-title">
       <h2 id="recent-title">Recent alerts</h2>
       <ul>
-        {alerts.map((a) => (
-          <li key={a.id}>
-            <span className={tone(a.pnlPct)}>
-              <b>{a.asset}</b> {a.kind === 'watch' ? `near ${threshold(a.thresholdPct)}` : `crossed ${threshold(a.thresholdPct)}`}
-            </span>
-            <span className="when">
-              {new Date(a.createdAt).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
-              {STATUS_TEXT[a.status] && <em>{STATUS_TEXT[a.status]}</em>}
-            </span>
-          </li>
-        ))}
+        {alerts.map((a) => {
+          const head = (
+            <>
+              <span className={tone(a.pnlPct)}>
+                <b>{a.asset}</b> {a.kind === 'watch' ? `near ${threshold(a.thresholdPct)}` : `crossed ${threshold(a.thresholdPct)}`}
+              </span>
+              <span className="when">
+                {new Date(a.createdAt).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                {STATUS_TEXT[a.status] && <em>{STATUS_TEXT[a.status]}</em>}
+              </span>
+            </>
+          );
+          return (
+            <li key={a.id}>
+              {a.analysis ? (
+                <details>
+                  <summary>{head}</summary>
+                  <AnalysisCard analysis={a.analysis} compact />
+                </details>
+              ) : (
+                <div className="recent-row">{head}</div>
+              )}
+            </li>
+          );
+        })}
       </ul>
     </section>
   );

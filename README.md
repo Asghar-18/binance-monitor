@@ -9,7 +9,10 @@ It sends Telegram alerts when a coin's profit/loss crosses thresholds you choose
 - **Backend** (`apps/backend`, NestJS): read-only Binance connection, a startup check that refuses keys with trading or withdrawal permission, balances every minute, Spot trade and Convert history import, weighted-average cost basis in USD and PKR, manual entry-price overrides, USD/PKR rates.
 - **Live prices** over Binance WebSocket, with automatic reconnects.
 - **Phone alerts** through the ntfy app (no VPN needed) and optionally Telegram, when P/L from your average entry crosses a threshold. A buffer stops a price wobbling around a level from spamming you, with a cooldown per coin, quiet hours, and mute. Manage thresholds on the dashboard (or with Telegram bot commands).
-- **Dashboard** (`apps/web`, Next.js): total value, P/L, allocation strip, holdings with details, entry prices, alert thresholds, recent alerts. Password protected. Light and dark mode.
+- **Technical picture** for each coin on 1h, 4h and daily candles: trend, RSI, volume, support and resistance.
+- **Claude's explanation** inside every threshold alert and on demand: what is happening in plain English. It describes the numbers only and never says buy or sell (see "How Claude is kept honest").
+- **Morning summary** each day at 09:00: portfolio value, 24h move, P/L and each coin's daily trend, with a short summary from Claude.
+- **Dashboard** (`apps/web`, Next.js): total value, P/L, allocation strip, holdings with details, entry prices, alert thresholds, recent alerts with analysis. Sign-in with password and 2FA. Light and dark mode.
 - **Shared types** (`packages/shared`).
 - **Postgres** for trades, sync progress, exchange rates and your overrides.
 - **Docker Compose** for running everything, with optional automatic HTTPS through Caddy.
@@ -82,6 +85,19 @@ Caddy gets an HTTPS certificate automatically.
 - A silent "approaching" message comes 1 point before a threshold. These are skipped during quiet hours; threshold alerts are not.
 - No alerts during the first 5 minutes after startup or while prices are stale.
 
+## How Claude is kept honest
+
+Claude only interprets numbers the app has already calculated; it never calculates prices, P/L or indicators itself. Every reply is checked before it reaches you:
+
+- **Advice is rejected**: phrases like "you should", "consider selling", "take profit", "buy the dip".
+- **Predictions are rejected**: "will bounce", "is going to fall", price targets, stop-losses.
+- **Invented numbers are rejected**: every number must appear in the data Claude was given.
+- If a reply breaks a rule, Claude gets one retry with the reason. If that fails too, or Claude is slow (over 20 s) or over budget, the alert goes out anyway with just the numbers.
+
+Every call is stored in the `llm_calls` table with its cost. Claude Haiku costs roughly $0.002 per alert; `LLM_MONTHLY_BUDGET_USD` (default $5) caps the monthly spend.
+
+Indicators follow fixed rules: trend is **bullish** when price is above the 50-period EMA, the 20 EMA is above the 50, and the MACD histogram is positive; **bearish** is the mirror image; anything else is **neutral**. RSI uses 14 periods; volume compares the last closed candle with the average of the previous 20; support and resistance are the nearest swing lows and highs on 4h and daily candles.
+
 ### Telegram bot commands (optional)
 
 | Command | What it does |
@@ -137,6 +153,5 @@ After changing `apps/backend/src/db/schema.ts`, run `pnpm --filter @bpm/backend 
 
 ## Next steps
 
-- Indicator engine (RSI, EMA, MACD, ATR, support/resistance) on candles.
-- AI analysis with Claude inside each alert.
-- Daily digest and alert evaluation.
+- Your own rules, e.g. "notify me when down 10% and RSI below 30".
+- Alert evaluation: what the price did 1 day and 7 days after each alert.
