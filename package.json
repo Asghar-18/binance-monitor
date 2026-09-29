@@ -1,0 +1,13 @@
+{
+  "name": "binance-monitor",
+  "private": true,
+  "packageManager": "pnpm@9.15.9",
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "dev:backend": "pnpm --filter @bpm/backend dev",
+    "dev:web": "pnpm --filter @bpm/web dev",
+    "build": "pnpm -r build",
+    "typecheck": "pnpm -r typecheck",
+    "test": "pnpm -r test"
+  }
+}

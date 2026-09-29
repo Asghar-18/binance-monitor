@@ -1,0 +1,6 @@
+# Automatic HTTPS (Let's Encrypt) for your domain.
+{$DOMAIN} {
+	encode gzip
+	header Strict-Transport-Security "max-age=31536000"
+	reverse_proxy web:3000
+}
